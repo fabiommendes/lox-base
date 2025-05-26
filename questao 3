@@ -1,0 +1,105 @@
+# Em lox/transformer.py (ou onde LoxTransformer está definido)
+
+from lark import Transformer, Token
+# Supondo que lox.ast.Gettattr e outras classes AST (como FunCall) existem
+# from .ast import Gettattr, FunCall # Ajuste o import
+
+class LoxTransformer(Transformer):
+    # ... outros métodos do transformer ...
+
+    def call(self, children):
+        obj = children[0]  # O resultado da 'primary' expression
+
+        if len(children) > 1: # Se houver sufixos (chamadas de função ou acessos a atributos)
+            for suffix_tree in children[1:]:
+                # suffix_tree é uma Tree com .data 'func_call_suffix' ou 'get_attr_suffix'
+                if suffix_tree.data == 'func_call_suffix':
+                    # Lógica para construir um nó AST de chamada de função (FunCall)
+                    # Esta parte é um placeholder e precisa ser implementada de acordo
+                    # com a sua definição de 'arguments' e a classe AST 'FunCall'.
+                    # Exemplo conceitual:
+                    # paren_token = suffix_tree.meta_override_or_first_token_if_not_set
+                    # actual_args = [] # Processar suffix_tree.children para obter argumentos
+                    # obj = FunCall(obj, actual_args, paren_token)
+                    pass # Substitua pela sua lógica de FunCall
+
+                elif suffix_tree.data == 'get_attr_suffix':
+                    # suffix_tree.children são [Token('.', '.'), Token('IDENTIFIER', 'attr_name')]
+                    # O Token IDENTIFIER é o segundo filho
+                    identifier_token = suffix_tree.children[1]
+                    # Supondo que Gettattr é importado de lox.ast
+                    obj = Gettattr(obj, identifier_token)
+        return obj
+
+    # ... outros métodos necessários para IDENTIFIER, literal, arguments etc. ...
+
+# Em lox/ast.py (ou onde suas classes AST são definidas)
+
+from lark import Token # Para type hinting, se usar
+
+class LoxRuntimeError(RuntimeError):
+    """Exceção customizada para erros de runtime em Lox."""
+    def __init__(self, token: Token, message: str):
+        super().__init__(message)
+        self.token = token # Token que causou o erro (para linha/coluna)
+        self.message = message # A mensagem de erro
+
+
+class Gettattr:
+    """Nó AST para acesso a atributos (ex: obj.atributo)."""
+    def __init__(self, obj_expr, attribute_name_token: Token):
+        """
+        Inicializa um nó Gettattr.
+
+        Args:
+            obj_expr: O nó AST da expressão que avalia para o objeto.
+            attribute_name_token: O Token IDENTIFIER para o nome do atributo.
+        """
+        self.obj_expr = obj_expr
+        self.attribute_name = attribute_name_token.value  # String com o nome do atributo
+        self.token = attribute_name_token  # Guarda o token para info de erro (linha, coluna)
+
+    def __repr__(self):
+        return f"Gettattr(obj={self.obj_expr!r}, attr='{self.attribute_name}')"
+
+    def eval(self, environment):
+        """
+        Avalia o acesso ao atributo.
+
+        Args:
+            environment: O ambiente de execução onde as variáveis são resolvidas.
+
+        Returns:
+            O valor do atributo.
+
+        Raises:
+            LoxRuntimeError: Se o acesso ao atributo falhar.
+        """
+        # 1. Avalia a expressão do objeto para obter o objeto Python real
+        target_object = self.obj_expr.eval(environment)
+
+        # 2. Lida com o caso de tentar acessar um atributo em 'nil'
+        if target_object is None: # Supondo que 'nil' de Lox é representado por None em Python
+            raise LoxRuntimeError(
+                self.token,
+                f"Can only access properties on objects, not on nil."
+            )
+
+        try:
+            # 3. Usa a função getattr do Python para acessar o atributo dinamicamente
+            attribute_value = getattr(target_object, self.attribute_name)
+            return attribute_value
+        except AttributeError:
+            # Isso ocorre se o atributo não existir no target_object,
+            # ou se target_object for de um tipo que não possui o atributo (ex: um número).
+            raise LoxRuntimeError(
+                self.token,
+                f"Undefined property '{self.attribute_name}'."
+            )
+        except Exception as e: # Captura outros erros inesperados durante o acesso
+            # É uma boa prática ser mais específico sobre as exceções que você espera aqui,
+            # mas Exception é um fallback.
+            raise LoxRuntimeError(
+                self.token,
+                f"Error accessing property '{self.attribute_name}': {str(e)}"
+            )

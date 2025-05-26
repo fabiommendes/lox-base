@@ -1,0 +1,114 @@
+# Em seu arquivo lox/transformer.py
+
+from lark import Token # Ou de onde quer que Token venha
+# Supondo que Call, Gettattr são suas classes AST
+# from .ast import Call, Gettattr # Ajuste o import
+
+class LoxTransformer(Transformer):
+    # ... outros métodos ...
+
+    def call_expression(self, children):
+        # children[0] é o resultado da primary_expression
+        obj = children[0]
+
+        if len(children) > 1: # Se houver sufixos (chamadas de função ou acessos a atributos)
+            for suffix_tree in children[1:]:
+                if suffix_tree.data == 'function_call_suffix':
+                    # suffix_tree.children contém [Token('('), resultado_do_params, Token(')')]
+                    # O resultado_do_params (children[1]) é a lista de nós AST dos argumentos
+                    lparen_token = suffix_tree.children[0]
+                    argument_ast_nodes = suffix_tree.children[1] # Lista de nós AST dos argumentos
+                    obj = Call(obj, argument_ast_nodes, lparen_token)
+                elif suffix_tree.data == 'get_attr_suffix':
+                    # suffix_tree.children contém [Token('.'), Token('IDENTIFIER')]
+                    identifier_token = suffix_tree.children[1]
+                    obj = Gettattr(obj, identifier_token)
+        return obj
+
+    def params(self, items):
+        # items são os nós AST das expressões de argumento já transformados
+        return items # Retorna uma lista de nós AST de expressão
+
+    # ... implementações para primary_expression, IDENTIFIER, literal, expression ...
+
+# Em seu arquivo lox/ast.py
+
+from lark import Token # Para anotações de tipo
+# Suponha uma LoxCallable interface e LoxRuntimeError como definido anteriormente
+# from .core import LoxCallable, LoxRuntimeError # Ajuste o import
+# from .interpreter import Interpreter # Se o método call precisar da instância do interpretador
+
+# Interface LoxCallable (exemplo para referência)
+# class LoxCallable:
+#     def arity(self) -> int:
+#         raise NotImplementedError
+#     def call(self, interpreter: 'Interpreter', arguments: list):
+#         raise NotImplementedError
+
+class Call: # Supondo que herda de uma classe base Expression, se houver
+    def __init__(self, callee_expr, argument_expr_nodes: list, open_paren_token: Token):
+        """
+        Nó AST para uma chamada de função ou método.
+
+        Args:
+            callee_expr: O nó AST da expressão que deve avaliar para um callable.
+                         Pode ser um Identifier, Gettattr, ou até mesmo outro Call.
+            argument_expr_nodes: Uma lista de nós AST para as expressões de argumento.
+            open_paren_token: O Token '(' para informações de erro (linha/coluna).
+        """
+        self.callee_expr = callee_expr
+        self.argument_expr_nodes = argument_expr_nodes
+        self.paren_token = open_paren_token # Para reportar erros com a linha correta
+
+    def __repr__(self):
+        args_repr = ", ".join(repr(arg) for arg in self.argument_expr_nodes)
+        return f"Call(callee={self.callee_expr!r}, args=[{args_repr}])"
+
+    def eval(self, environment, interpreter: 'Interpreter'): # Adicionado interpreter
+        """
+        Avalia a chamada da função/método.
+
+        Args:
+            environment: O ambiente atual para avaliação.
+            interpreter: A instância do interpretador (pode ser necessária para o método .call() do LoxCallable).
+
+        Returns:
+            O resultado da chamada da função/método.
+
+        Raises:
+            LoxRuntimeError: Se o objeto callee não for callable, ou se a aridade não corresponder.
+        """
+        # 1. Avalia a expressão do "callee"
+        # Agora, self.callee_expr pode ser um Identifier, Gettattr, ou outro Call.
+        # Sua avaliação deve resultar em um objeto que implementa LoxCallable.
+        lox_callable = self.callee_expr.eval(environment, interpreter) # Passar interpreter se eval precisar
+
+        # 2. Avalia cada expressão de argumento
+        evaluated_arguments = []
+        for arg_expr_node in self.argument_expr_nodes:
+            evaluated_arguments.append(arg_expr_node.eval(environment, interpreter)) # Passar interpreter
+
+        # 3. Verifica se o objeto é realmente um callable de Lox
+        # (Supondo uma interface LoxCallable que funções, métodos e classes implementam)
+        if not hasattr(lox_callable, 'call') or not hasattr(lox_callable, 'arity'):
+             # Ou: if not isinstance(lox_callable, LoxCallable):
+            raise LoxRuntimeError(self.paren_token, "Can only call functions and classes.")
+
+        # 4. Verifica a aridade (número de argumentos)
+        num_args_provided = len(evaluated_arguments)
+        expected_arity = lox_callable.arity()
+        if num_args_provided != expected_arity:
+            raise LoxRuntimeError(
+                self.paren_token,
+                f"Expected {expected_arity} arguments but got {num_args_provided}."
+            )
+
+        # 5. Executa a chamada
+        # O método 'call' do LoxCallable pode precisar da instância do interpretador
+        # para manipulação de ambiente (ex: para closures em LoxFunction).
+        return lox_callable.call(interpreter, evaluated_arguments)
+
+# Nota: As classes LoxCallable, LoxRuntimeError e Interpreter são referenciadas aqui
+# e precisariam estar definidas de forma consistente com esta implementação.
+# A passagem do 'interpreter' para os métodos 'eval' e 'call' é um padrão comum
+# em interpretadores de árvore.

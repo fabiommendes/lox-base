@@ -1,0 +1,45 @@
+// Em seu arquivo lox/grammar.lark
+
+// ... outras regras e terminais ...
+
+STRING: /"[^"]*"/
+
+// ... outros terminais como NUMBER, IDENTIFIER ...
+// %import common.WS
+// %ignore WS
+
+# Em seu arquivo lox/LoxTransformer.py (ou onde LoxTransformer está definido)
+
+from lark import Transformer, Token
+# Supondo que você tenha uma classe Literal definida, por exemplo:
+#
+# class Literal:
+#     def __init__(self, value):
+#         self.value = value
+#     def __repr__(self):
+#         return f"Literal({self.value!r})"
+
+class LoxTransformer(Transformer):
+    # ... outros métodos do transformer para números, identificadores, etc. ...
+
+    def STRING(self, token: Token) -> 'Literal': # Substitua 'Literal' por sua classe de nó AST real
+        """
+        Processa um token STRING.
+        A string correspondente do lexer inclui as aspas circundantes.
+        Este método remove essas aspas. Strings Lox não têm sequências de escape.
+        """
+        # token.value é a string literal com as aspas, ex: "\"conteúdo real da string\""
+        # Precisamos remover o primeiro e o último caractere (as aspas).
+        string_com_aspas = token.value
+        conteudo_real = string_com_aspas[1:-1]
+        
+        # O prompt original usava 'data = process_strings()'.
+        # Para Lox, 'process_strings' é simplesmente remover as aspas,
+        # pois não há sequências de escape para lidar.
+        data = conteudo_real
+        
+        return Literal(data) # Substitua 'Literal' por sua classe de nó AST real
+
+    # Exemplo de como NUMBER pode ser tratado, para contexto:
+    # def NUMBER(self, token: Token) -> 'Literal':
+    #     return Literal(float(token.value))

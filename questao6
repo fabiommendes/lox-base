@@ -1,0 +1,92 @@
+# Em seu arquivo lox/ast.py (ou onde seus nós AST são definidos)
+
+from lark import Token # Para anotação de tipo, se estiver usando
+
+# Suponha que você tenha uma LoxRuntimeError para erros em tempo de execução.
+# class LoxRuntimeError(RuntimeError):
+#     def __init__(self, token: Token, message: str):
+#         super().__init__(message)
+#         self.token = token
+#         self.message = message
+
+
+class Logical: # Considere herdar de uma classe Expression base, se houver
+    """Nó AST para operadores lógicos 'and' e 'or'."""
+    def __init__(self, left_expr, operator_token: Token, right_expr):
+        self.left = left_expr
+        self.operator = operator_token  # O Token ('AND' ou 'OR')
+        self.right = right_expr
+        # self.token = operator_token # Pode ser útil para LoxRuntimeError
+
+    def __repr__(self):
+        return f"Logical(left={self.left!r}, op='{self.operator.value}', right={self.right!r})"
+
+    def _is_lox_truthy(self, value):
+        """
+        Determina a 'verdade' de um valor de acordo com as regras do Lox.
+        Em Lox, 'nil' e 'false' são falsos, e todo o resto é verdadeiro.
+        """
+        if value is None:  # nil
+            return False
+        if isinstance(value, bool):  # true ou false
+            return value
+        return True  # Números, strings, instâncias de classes, etc., são verdadeiros
+
+    def eval(self, environment, interpreter): # 'interpreter' pode ser necessário para sub-avaliações
+        """
+        Avalia a expressão lógica com comportamento de curto-circuito.
+        """
+        left_value = self.left.eval(environment, interpreter)
+
+        if self.operator.type == 'OR': # Corresponde ao nome do terminal definido na gramática
+            # Se o lado esquerdo do 'or' é verdadeiro, retorna seu valor (curto-circuito)
+            if self._is_lox_truthy(left_value):
+                return left_value
+        elif self.operator.type == 'AND': # Corresponde ao nome do terminal definido na gramática
+            # Se o lado esquerdo do 'and' é falso, retorna seu valor (curto-circuito)
+            if not self._is_lox_truthy(left_value):
+                return left_value
+        else:
+            # Este caso não deve ser alcançado se o parser e o transformer estiverem corretos.
+            # Você pode querer levantar um LoxRuntimeError aqui se tiver um.
+            raise Exception(f"Internal error: Unknown logical operator type '{self.operator.type}'")
+
+        # Se não houve curto-circuito, avalia e retorna o valor do lado direito.
+        return self.right.eval(environment, interpreter)
+# Em seu arquivo lox/transformer.py
+
+from lark import Transformer, Token
+# Supondo que a classe Logical está em lox.ast
+# from .ast import Logical # Ajuste o import conforme sua estrutura
+
+class LoxTransformer(Transformer):
+    # ... outros métodos existentes do transformer ...
+
+    def logic_or(self, children):
+        # 'children' é uma lista contendo alternadamente nós de expressão (logic_and)
+        # e tokens de operador OR.
+        # Ex: [logic_and_node, OR_token, logic_and_node, OR_token, logic_and_node]
+        expr = children[0]  # O primeiro logic_and (lado esquerdo inicial)
+
+        # Itera sobre os pares (operador, operando_direito)
+        for i in range(1, len(children), 2):
+            operator_token = children[i]    # O Token OR
+            right_operand = children[i+1]   # O próximo nó logic_and
+            expr = Logical(expr, operator_token, right_operand)
+        return expr
+
+    def logic_and(self, children):
+        # 'children' é uma lista contendo alternadamente nós de expressão (equality)
+        # e tokens de operador AND.
+        # Ex: [equality_node, AND_token, equality_node, AND_token, equality_node]
+        expr = children[0]  # O primeiro equality (lado esquerdo inicial)
+
+        # Itera sobre os pares (operador, operando_direito)
+        for i in range(1, len(children), 2):
+            operator_token = children[i]    # O Token AND
+            right_operand = children[i+1]   # O próximo nó equality
+            expr = Logical(expr, operator_token, right_operand)
+        return expr
+
+    # ... seus métodos para equality, comparison, term, factor, unary, call_expression,
+    # primary_expression, literal, IDENTIFIER, etc. devem estar aqui ...

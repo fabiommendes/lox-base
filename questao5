@@ -1,0 +1,39 @@
+# 1. Na gramática Lox (exemplo EBNF):
+# unary → ( "!" | "-" ) unary | primary ;
+
+# 2. Parser - método unary()
+def unary():
+    if match("!", "-"):
+        operator = previous()
+        right = unary()
+        return UnaryExpr(operator, right)
+    return primary()
+
+# 3. Classe de expressão unária
+class UnaryExpr(Expr):
+    def __init__(self, operator, right):
+        self.operator = operator
+        self.right = right
+
+# 4. Avaliação da expressão unária no interpretador
+def evaluate_unary(expr):
+    right = evaluate(expr.right)
+
+    if expr.operator.type == BANG:
+        return not is_truthy(right)
+    elif expr.operator.type == MINUS:
+        check_number_operand(expr.operator, right)
+        return -right
+
+# Função auxiliar para verificar número
+def check_number_operand(operator, operand):
+    if not isinstance(operand, (int, float)):
+        raise RuntimeError(operator, "Operand must be a number.")
+
+# Função auxiliar para avaliar verdade
+def is_truthy(value):
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    return True
