@@ -1,0 +1,128 @@
+# Em seu arquivo lox/ast.py (ou onde seus nós AST são definidos)
+
+from lark import Token # Para anotação de tipo
+
+# Suponha que você tenha uma LoxRuntimeError para erros em tempo de execução.
+# class LoxRuntimeError(RuntimeError):
+#     def __init__(self, token: Token, message: str):
+#         super().__init__(message)
+#         self.token = token
+#         self.message = message
+
+
+class Setattr: # Considere herdar de uma classe Expression base, se houver
+    """Nó AST para atribuição de atributos (ex: obj.campo = valor)."""
+    def __init__(self, obj_expr, attribute_name_token: Token, value_expr):
+        """
+        Inicializa um nó Setattr.
+
+        Args:
+            obj_expr: O nó AST da expressão que avalia para o objeto.
+            attribute_name_token: O Token IDENTIFIER para o nome do atributo.
+            value_expr: O nó AST da expressão cujo valor será atribuído.
+        """
+        self.obj_expr = obj_expr
+        self.attribute_name_token = attribute_name_token
+        self.value_expr = value_expr
+
+    def __repr__(self):
+        return f"Setattr(obj={self.obj_expr!r}, attr='{self.attribute_name_token.value}', value={self.value_expr!r})"
+
+    def eval(self, environment, interpreter): # 'interpreter' pode ser necessário
+        """
+        Avalia a atribuição de atributo.
+
+        1. Avalia a expressão do objeto.
+        2. Avalia a expressão do valor.
+        3. Usa setattr() do Python para definir o atributo no objeto.
+        4. Retorna o valor atribuído.
+
+        Args:
+            environment: O ambiente de execução.
+            interpreter: A instância do interpretador.
+
+        Returns:
+            O valor que foi atribuído.
+
+        Raises:
+            LoxRuntimeError: Se a atribuição falhar (ex: objeto é nil,
+                             objeto não suporta atributos, etc.).
+        """
+        # 1. Avalia a expressão do objeto para obter o objeto alvo.
+        target_object = self.obj_expr.eval(environment, interpreter)
+
+        # 2. Verifica se o objeto alvo pode ter atributos definidos.
+        # Em Lox, geralmente apenas instâncias de classes podem ter campos definidos.
+        # 'nil' certamente não pode.
+        if target_object is None: # Supondo que 'nil' de Lox é None em Python
+            raise LoxRuntimeError(
+                self.attribute_name_token, # Token do nome do atributo para info de linha/coluna
+                "Can only set properties on objects, not on nil."
+            )
+        
+        # Em uma implementação completa de Lox, você verificaria se target_object é uma
+        # instância de LoxInstance:
+        # if not isinstance(target_object, LoxInstance): # Ou sua classe de instância Lox
+        #     raise LoxRuntimeError(self.attribute_name_token, "Only instances have fields.")
+        # Por agora, confiamos no comportamento de setattr() do Python.
+
+        # 3. Avalia a expressão do valor a ser atribuído.
+        value_to_set = self.value_expr.eval(environment, interpreter)
+
+        # 4. Usa setattr() do Python para definir o atributo.
+        # self.attribute_name_token.value fornece o nome do atributo como string.
+        try:
+            setattr(target_object, self.attribute_name_token.value, value_to_set)
+        except AttributeError as e:
+            # setattr pode levantar AttributeError se o objeto não permitir a atribuição
+            # (ex: tipos built-in do Python que são imutáveis ou não têm o slot).
+            # Em Lox, isso geralmente se traduziria em "Only instances have fields."
+            # ou um erro similar se o objeto não for uma instância de classe Lox.
+            raise LoxRuntimeError(
+                self.attribute_name_token,
+                f"Cannot set property '{self.attribute_name_token.value}' on this type of object."
+            )
+        except Exception as e: # Captura outros erros inesperados
+            raise LoxRuntimeError(
+                self.attribute_name_token,
+                f"Unexpected error setting property '{self.attribute_name_token.value}': {str(e)}"
+            )
+
+        # 5. A atribuição de atributo (como a atribuição de variável) retorna o valor atribuído.
+        return value_to_set
+# Em seu arquivo lox/transformer.py
+
+from lark import Transformer, Token
+# Supondo que as classes Assign e Setattr estão em lox.ast
+# from .ast import Assign, Setattr # Ajuste o import conforme sua estrutura
+
+class LoxTransformer(Transformer):
+    # ... outros métodos existentes do transformer ...
+
+    # Método para a regra com alias:
+    # call_expression "." IDENTIFIER ASSIGN value=assignment -> set_attribute
+    def set_attribute(self, children):
+        """
+        Cria um nó Setattr AST.
+        'children' será [obj_expr_node, dot_token, attr_name_token, assign_token, value_expr_node].
+        """
+        obj_expr_node = children[0]        # Nó AST da expressão do objeto
+        # children[1] é o Token "."
+        attr_name_token = children[2]      # Token IDENTIFIER do nome do atributo
+        # children[3] é o Token ASSIGN "="
+        value_expr_node = children[4]      # Nó AST da expressão do valor (resultado de 'value=assignment')
+        
+        return Setattr(obj_expr_node, attr_name_token, value_expr_node)
+
+    # Método para assign_variable (do exercício anterior, para referência)
+    # IDENTIFIER ASSIGN value=assignment -> assign_variable
+    def assign_variable(self, children):
+        name_token = children[0]
+        value_expr_node = children[2] # children[1] é o Token ASSIGN
+        return Assign(name_token, value_expr_node)
+
+    # O método 'assignment' do transformer seria chamado se você não usasse aliases
+    # para as sub-regras, mas usar aliases como acima ('set_attribute', 'assign_variable')
+    # geralmente torna os métodos do transformer mais simples e diretos.
+
+    # ... seus métodos para logic_or, call_expression, primary_expression, etc. ...
