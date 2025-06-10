@@ -1,0 +1,98 @@
+# Em seu arquivo lox/ast.py (ou onde seus nós AST são definidos)
+
+from lark import Token # Para anotação de tipo, se estiver usando
+
+# Suponha que você tenha uma LoxRuntimeError para erros em tempo de execução.
+# class LoxRuntimeError(RuntimeError):
+#     def __init__(self, token: Token, message: str):
+#         super().__init__(message)
+#         self.token = token
+#         self.message = message
+
+
+class Assign: # Considere herdar de uma classe Expression base, se houver
+    """Nó AST para expressões de atribuição (ex: x = 10)."""
+    def __init__(self, name_token: Token, value_expr):
+        """
+        Inicializa um nó Assign.
+
+        Args:
+            name_token: O Token IDENTIFIER para o nome da variável.
+            value_expr: O nó AST da expressão cujo valor será atribuído.
+        """
+        self.name_token = name_token  # O Token IDENTIFIER (contém .value para o nome string)
+        self.value_expr = value_expr
+
+    def __repr__(self):
+        return f"Assign(name='{self.name_token.value}', value={self.value_expr!r})"
+
+    def eval(self, environment, interpreter): # 'interpreter' pode ser necessário para sub-avaliações
+        """
+        Avalia a expressão de atribuição.
+
+        1. Avalia a expressão do lado direito para obter o valor.
+        2. Atribui o valor à variável no ambiente.
+           (O método 'environment.assign' deve gerar um LoxRuntimeError
+            se a variável não estiver definida no escopo atual ou em escopos superiores).
+        3. Retorna o valor atribuído (pois a atribuição é uma expressão).
+
+        Args:
+            environment: O ambiente de execução atual.
+            interpreter: A instância do interpretador (pode ser necessária para eval da sub-expressão).
+
+        Returns:
+            O valor que foi atribuído.
+
+        Raises:
+            LoxRuntimeError: Se a variável não estiver definida (gerado por environment.assign).
+        """
+        # 1. Avalia a expressão do lado direito para obter o valor a ser atribuído.
+        value_to_assign = self.value_expr.eval(environment, interpreter)
+
+        # 2. Atribui o valor à variável no ambiente.
+        # O método 'environment.assign()' é responsável por encontrar a variável
+        # nos escopos e atribuir o valor, ou lançar um erro se não definida.
+        # Exemplo de chamada (a implementação de environment.assign é externa a esta classe):
+        # try:
+        #     environment.assign(self.name_token, value_to_assign)
+        # except KeyError: # Ou qualquer exceção que seu environment.assign levante para var não definida
+        #     raise LoxRuntimeError(self.name_token, f"Undefined variable '{self.name_token.value}'.")
+        environment.assign(self.name_token, value_to_assign)
+
+
+        # 3. O resultado de uma expressão de atribuição é o próprio valor atribuído.
+        return value_to_assign
+
+# Em seu arquivo lox/transformer.py
+
+from lark import Transformer, Token
+# Supondo que a classe Assign está em lox.ast
+# from .ast import Assign # Ajuste o import conforme sua estrutura
+
+class LoxTransformer(Transformer):
+    # ... outros métodos existentes do transformer ...
+
+    # Método para a regra com alias: assignment: IDENTIFIER ASSIGN assignment -> assign_variable
+    def assign_variable(self, children):
+        """
+        Cria um nó Assign AST a partir dos componentes da regra de atribuição.
+        'children' será [IDENTIFIER_token, ASSIGN_token, value_assignment_node_AST].
+        """
+        name_token = children[0]        # O Token IDENTIFIER
+        # children[1] é o Token ASSIGN ("="), geralmente não é necessário para o nó AST
+        value_expr_node = children[2]   # O nó AST resultante da avaliação da sub-expressão 'assignment'
+        return Assign(name_token, value_expr_node)
+
+    # Se você não usar o alias "-> assign_variable" e em vez disso tiver um método "assignment":
+    # def assignment(self, children):
+    #     if len(children) == 1:
+    #         # É um logic_or (ou a próxima regra de maior precedência)
+    #         return children[0]
+    #     else:
+    #         # É uma atribuição: IDENTIFIER ASSIGN assignment
+    #         name_token = children[0]
+    #         # children[1] é o Token ASSIGN
+    #         value_expr_node = children[2]
+    #         return Assign(name_token, value_expr_node)
+
+    # ... seus métodos para logic_or, logic_and, equality, etc., devem estar aqui ...

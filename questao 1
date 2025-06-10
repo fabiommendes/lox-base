@@ -1,0 +1,20 @@
+VALIDOS_EM_AMBAS_ESPECIFICACOES = [
+    "0",
+    "123",
+    "98765",
+    "0.5",
+    "123.456",
+]
+VALIDOS_EM_LOX_E_INVALIDOS_NA_NOSSA_VERSAO = [
+    ".123",
+    ".0",
+    "01",
+    "007",
+    "012.345",
+]
+VALIDOS_NA_NOSSA_VERSAO_E_INVALIDOS_EM_LOX = [
+    # Nenhum exemplo é possível com a regex fornecida NUM: /([1-9][0-9]*|0)(\.[0-9]+)?/
+    # e a especificação de Lox. A regex define um subconjunto de números
+    # que também são lexicalmente válidos em Lox. As proibições de Lox
+    # (ponto final, notação científica, etc.) também não são permitidas pela regex.
+]
